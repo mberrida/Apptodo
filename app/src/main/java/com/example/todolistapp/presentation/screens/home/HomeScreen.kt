@@ -27,7 +27,10 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.rememberDismissState
 import androidx.compose.material.DismissDirection
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ScaffoldState
 import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.ui.draw.clip
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -101,6 +104,60 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+// 🔹 Menu Latéral (Drawer)
+@Composable
+fun DrawerMenu(
+    authViewModel: AuthViewModel,
+    navController: NavController,
+    scaffoldState: ScaffoldState
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(text = "Menu", fontSize = 22.sp, color = Color.Black)
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 🔹 Bouton Home
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        navController.navigate("HomeScreen")
+                    }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Home, contentDescription = "Home")
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(text = "Home", fontSize = 18.sp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 🔹 Bouton Déconnexion
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        authViewModel.signOut()
+                        navController.navigate("SignInScreen") {
+                            popUpTo("SignInScreen") { inclusive = true }
+                        }
+                    }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.ExitToApp, contentDescription = "Logout", tint = Color.Red)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(text = "Logout", fontSize = 18.sp, color = Color.Red)
             }
         }
     }
