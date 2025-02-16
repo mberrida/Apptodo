@@ -1,5 +1,6 @@
 package com.example.todolistapp.presentation.screens.auth
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -78,4 +79,11 @@ class AuthViewModel : ViewModel() {
                 }
         }
     }
+
+    fun signOut() {
+        auth.signOut() // Déconnecter l'utilisateur de Firebase
+        _authState.value = AuthState.Idle // Réinitialiser l'état d'authentification
+        Log.d("AuthViewModel", "✅ Utilisateur déconnecté avec succès")
+    }
+
 }
