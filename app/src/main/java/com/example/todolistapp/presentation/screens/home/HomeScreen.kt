@@ -170,11 +170,6 @@ fun TaskColumn(tasks: List<Task>, taskListViewModel: TaskListViewModel, userId: 
     }
 }
 
-
-
-
-
-
 @Composable
 fun TaskSection(
     title: String,
