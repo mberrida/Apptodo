@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.rememberDismissState
 import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.ScaffoldState
 import androidx.compose.material.SwipeToDismiss
@@ -58,13 +59,13 @@ fun HomeScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
-    // Chargement des tâches au lancement
+    // 🔹 État pour savoir si on est sur TO DO ou DONE
+    var selectedTab by remember { mutableStateOf("TO DO") }
+
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) {
-            Log.d("HomeScreen", "🔄 Chargement des tâches pour l'utilisateur: $userId")
             taskListViewModel.loadUserTasks(userId)
         } else {
-            Log.e("HomeScreen", "⚠ Aucun utilisateur connecté ! Redirection vers connexion.")
             navController.navigate("SignInScreen")
         }
     }
@@ -86,8 +87,6 @@ fun HomeScreen(
                     onClick = {
                         if (userId.isNotEmpty()) {
                             navController.navigate("AddEditTaskScreen")
-                        } else {
-                            Log.e("HomeScreen", "⚠ Aucun utilisateur connecté, impossible d'ajouter une tâche.")
                         }
                     },
                     containerColor = Color.Black
@@ -110,28 +109,156 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                if (tasks.isEmpty()) {
-                    Text(
-                        text = "No tasks available",
-                        color = Color.Gray,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                } else {
-                    LazyColumn {
-                        items(tasks, key = { it.taskID ?: "" }) { task ->
-                            SwipeTaskItem(
-                                task = task,
-                                onDelete = { taskListViewModel.deleteTask(task.taskID ?: "", userId) },
-                                onEdit = { task.taskID?.let { navController.navigate("AddEditTaskScreen/$it") } },
-                                navController = navController
-                            )
-                        }
+                // 🔹 Boutons de sélection TO DO / DONE
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Button(
+                        onClick = { selectedTab = "TO DO" },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedTab == "TO DO") Color.Black else Color.Gray
+                        )
+                    ) {
+                        Text("TO DO", color = Color.White)
                     }
+
+                    Button(
+                        onClick = { selectedTab = "DONE" },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedTab == "DONE") Color.Black else Color.Gray
+                        )
+                    ) {
+                        Text("DONE", color = Color.White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 🔹 Sélection des tâches en fonction du bouton cliqué
+                val filteredTasks = when (selectedTab) {
+                    "TO DO" -> tasks.filter { !(it.taskIsFinished ?: false) }
+                    "DONE" -> tasks.filter { it.taskIsFinished ?: false }
+                    else -> tasks
+                }
+
+                // 🔹 Liste des tâches
+                TaskColumn(filteredTasks, taskListViewModel, userId, navController)
+
+            }
+        }
+    }
+}
+
+
+@Composable
+fun TaskColumn(tasks: List<Task>, taskListViewModel: TaskListViewModel, userId: String, navController: NavController) {
+    LazyColumn {
+        items(tasks, key = { it.taskID ?: "" }) { task ->
+            SwipeTaskItem(
+                task = task,
+                onDelete = { taskListViewModel.deleteTask(task.taskID ?: "", userId) },
+                onEdit = { task.taskID?.let { navController.navigate("AddEditTaskScreen/$it") } },
+                onTaskChecked = { isChecked ->
+                    taskListViewModel.updateTaskCompletion(task.taskID ?: "", isChecked, userId)
+                },
+                navController = navController
+            )
+        }
+    }
+}
+
+
+
+
+
+
+@Composable
+fun TaskSection(
+    title: String,
+    tasks: List<Task>,
+    onTaskChecked: (Task, Boolean) -> Unit,
+    navController: NavController // 🔹 Ajout du NavController si nécessaire
+) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            text = title,
+            fontSize = 20.sp,
+            color = if (title == "TO DO") Color.Black else Color.Gray,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        if (tasks.isEmpty()) {
+            Text(text = "No tasks", color = Color.Gray, modifier = Modifier.padding(16.dp))
+        } else {
+            LazyColumn {
+                items(tasks, key = { it.taskID ?: "" }) { task ->
+                    TaskItem(
+                        task = task,
+                        onTaskChecked = { isChecked -> onTaskChecked(task, isChecked) },
+                        navController = navController // 🔹 Ajout si requis
+                    )
                 }
             }
         }
     }
 }
+
+
+@Composable
+fun TaskItem(task: Task, onTaskChecked: (Boolean) -> Unit, navController: NavController) {
+    var isChecked by remember { mutableStateOf(task.taskIsFinished ?: false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = isChecked,
+                onCheckedChange = { newCheckedState ->
+                    isChecked = newCheckedState
+                    onTaskChecked(newCheckedState) // 🔥 Met à jour Firestore
+                },
+                modifier = Modifier.padding(end = 12.dp)
+            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.taskName ?: "No title",
+                    fontSize = 16.sp,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Due on ${task.taskDueDate ?: "No due date"}",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+
+
+
+
+
 
 // 🔹 Top Bar avec bouton pour ouvrir le menu latéral
 @OptIn(ExperimentalMaterial3Api::class)
@@ -217,7 +344,7 @@ fun DrawerMenu(
             DrawerItem(
                 icon = Icons.Filled.Home,
                 text = "Home",
-                isSelected = true, // Met en surbrillance l'option active
+                isSelected = true,
                 onClick = {
                     navController.navigate("HomeScreen")
                     coroutineScope.launch { drawerState.close() }
@@ -282,32 +409,39 @@ fun DrawerItem(
 
 
 
-// 🔹 Swipeable Task Item (corrigé)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun SwipeTaskItem(
     task: Task,
-    onDelete: (Task) -> Unit,
-    onEdit: (Task) -> Unit,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    onTaskChecked: (Boolean) -> Unit,
     navController: NavController
 ) {
-    val dismissState = rememberDismissState()
-
-    if (dismissState.isDismissed(DismissDirection.StartToEnd)) {
-        Log.d("Navigation", "Task ID envoyé: ${task.taskID}")
-        navController.navigate("AddEditTaskScreen/${task.taskID}")
-    }
-    if (dismissState.isDismissed(DismissDirection.EndToStart)) {
-        onDelete(task)
-    }
+    val dismissState = rememberDismissState(
+        confirmStateChange = { dismissValue ->
+            when (dismissValue) {
+                DismissValue.DismissedToEnd -> {
+                    onEdit() // Modifier sur Swipe droite
+                    true
+                }
+                DismissValue.DismissedToStart -> {
+                    onDelete() // Supprimer sur Swipe gauche
+                    true
+                }
+                else -> false
+            }
+        }
+    )
 
     SwipeToDismiss(
         state = dismissState,
         directions = setOf(DismissDirection.StartToEnd, DismissDirection.EndToStart),
         background = {
-            val color = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> Color.Blue
-                DismissDirection.EndToStart -> Color.Red
+            val color = when (dismissState.targetValue) {
+                DismissValue.DismissedToEnd -> Color.Blue
+                DismissValue.DismissedToStart -> Color.Red
                 else -> Color.Transparent
             }
             Box(
@@ -317,17 +451,32 @@ fun SwipeTaskItem(
                     .padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(color),
-                contentAlignment = if (dismissState.dismissDirection == DismissDirection.EndToStart) Alignment.CenterEnd else Alignment.CenterStart
+                contentAlignment = if (dismissState.targetValue == DismissValue.DismissedToStart) Alignment.CenterEnd else Alignment.CenterStart
             ) {
-                if (dismissState.dismissDirection == DismissDirection.EndToStart) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Color.White, modifier = Modifier.padding(16.dp))
+                if (dismissState.targetValue == DismissValue.DismissedToStart) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Supprimer",
+                        tint = Color.White,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 } else {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = Color.White, modifier = Modifier.padding(16.dp))
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "Modifier",
+                        tint = Color.White,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             }
         },
         dismissContent = {
-            TaskItem(task, onTaskChecked = {}, onClick = {})
+            TaskItem(
+                task = task,
+                onTaskChecked = { isChecked -> onTaskChecked(isChecked) },
+                navController = navController
+            )
         }
     )
 }
+

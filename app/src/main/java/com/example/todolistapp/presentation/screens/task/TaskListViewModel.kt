@@ -23,29 +23,33 @@ class TaskListViewModel : ViewModel() {
     fun loadUserTasks(userId: String) {
         if (userId.isEmpty()) return
 
-        Log.d("TaskListViewModel", "🔍 Chargement des tâches pour l'utilisateur: $userId")
+        Log.d("TaskListViewModel", "🔍 Écoute en temps réel des tâches de l'utilisateur: $userId")
 
         firestore.collection("tasks")
             .whereEqualTo("userId", userId)
-            .get()
-            .addOnSuccessListener { documents ->
-                val taskList = documents.map { doc ->
-                    Task(
-                        taskID = doc.id,
-                        taskName = doc.getString("taskName") ?: "No Name",
-                        taskDescription = doc.getString("taskDescription") ?: "",
-                        taskDueDate = doc.getString("taskDueDate") ?: "",
-                        taskIsFinished = doc.getBoolean("taskIsFinished") ?: false,
-                        userId = doc.getString("userId") ?: ""
-                    )
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("TaskListViewModel", "❌ Erreur Firestore", e)
+                    return@addSnapshotListener
                 }
-                _tasks.value = taskList
-                Log.d("TaskListViewModel", "✅ Total de tâches chargées : ${taskList.size}")
-            }
-            .addOnFailureListener { exception ->
-                Log.e("TaskListViewModel", "❌ Erreur lors du chargement des tâches", exception)
+
+                if (snapshot != null) {
+                    val taskList = snapshot.documents.map { doc ->
+                        Task(
+                            taskID = doc.id,
+                            taskName = doc.getString("taskName") ?: "No Name",
+                            taskDescription = doc.getString("taskDescription") ?: "",
+                            taskDueDate = doc.getString("taskDueDate") ?: "",
+                            taskIsFinished = doc.getBoolean("taskIsFinished") ?: false,
+                            userId = doc.getString("userId") ?: ""
+                        )
+                    }
+                    _tasks.value = taskList
+                    Log.d("TaskListViewModel", "✅ Tâches mises à jour en direct : ${taskList.size}")
+                }
             }
     }
+
 
 
     /**
@@ -146,12 +150,28 @@ class TaskListViewModel : ViewModel() {
                 .update("taskIsFinished", isFinished)
                 .addOnSuccessListener {
                     Log.d("TaskListViewModel", "✅ Tâche mise à jour : $taskId")
-                    loadUserTasks(userId)
+                    loadUserTasks(userId) // 🔄 Recharge la liste immédiatement après mise à jour
                 }
                 .addOnFailureListener { e ->
                     Log.e("TaskListViewModel", "❌ Erreur lors de la mise à jour de la tâche", e)
                 }
         }
     }
+
+
+
+
+
+    /*  fun updateTaskStatus(taskId: String, isFinished: Boolean) {
+        viewModelScope.launch {
+            try {
+                FirebaseFirestore.getInstance().collection("tasks").document(taskId)
+                    .update("taskIsFinished", isFinished)
+            } catch (e: Exception) {
+                Log.e("TaskListViewModel", "Erreur lors de la mise à jour de la tâche", e)
+            }
+        }
+    }*/
+
 
 }
