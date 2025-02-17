@@ -3,10 +3,12 @@ package com.example.todolistapp.presentation.screens.home
 import android.annotation.SuppressLint
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,7 +33,15 @@ import androidx.compose.material.ScaffoldState
 import androidx.compose.material.SwipeToDismiss
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.rememberScaffoldState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import com.example.todolistapp.presentation.screens.task.TaskItem
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @SuppressLint("UnusedMaterialScaffoldPaddingParameter")
@@ -45,7 +55,10 @@ fun HomeScreen(
     val userId by authViewModel.userId.collectAsState()
     val tasks by taskListViewModel.tasks.collectAsState()
 
-    // 🔹 Charger les tâches dès qu'on a l'ID utilisateur
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+
+    // Chargement des tâches au lancement
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) {
             Log.d("HomeScreen", "🔄 Chargement des tâches pour l'utilisateur: $userId")
@@ -56,52 +69,63 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        topBar = { HomeTopBar() },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (userId.isNotEmpty()) {
-                        navController.navigate("AddEditTaskScreen")
-                    } else {
-                        Log.e("HomeScreen", "⚠ Aucun utilisateur connecté, impossible d'ajouter une tâche.")
-                    }
-                },
-                containerColor = Color.Black
-            ) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = "Ajouter une tâche", tint = Color.White)
-            }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            DrawerMenu(authViewModel, navController, drawerState)
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White)
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "Hello, $username!",
-                fontSize = 26.sp,
-                color = Color.Black
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (tasks.isEmpty()) {
+    ) {
+        Scaffold(
+            topBar = {
+                HomeTopBar {
+                    coroutineScope.launch { drawerState.open() }
+                }
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = {
+                        if (userId.isNotEmpty()) {
+                            navController.navigate("AddEditTaskScreen")
+                        } else {
+                            Log.e("HomeScreen", "⚠ Aucun utilisateur connecté, impossible d'ajouter une tâche.")
+                        }
+                    },
+                    containerColor = Color.Black
+                ) {
+                    Icon(imageVector = Icons.Filled.Add, contentDescription = "Ajouter une tâche", tint = Color.White)
+                }
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White)
+                    .padding(paddingValues)
+                    .padding(16.dp)
+            ) {
                 Text(
-                    text = "No tasks available",
-                    color = Color.Gray,
-                    modifier = Modifier.padding(16.dp)
+                    text = "Hello, $username!",
+                    fontSize = 26.sp,
+                    color = Color.Black
                 )
-            } else {
-                LazyColumn {
-                    items(tasks, key = { it.taskID ?: "" }) { task ->
-                        SwipeTaskItem(
-                            task = task,
-                            onDelete = { taskListViewModel.deleteTask(task.taskID ?: "", userId) },
-                            onEdit = { task.taskID?.let { navController.navigate("AddEditTaskScreen/$it") } },
-                            navController = navController
-                        )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (tasks.isEmpty()) {
+                    Text(
+                        text = "No tasks available",
+                        color = Color.Gray,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    LazyColumn {
+                        items(tasks, key = { it.taskID ?: "" }) { task ->
+                            SwipeTaskItem(
+                                task = task,
+                                onDelete = { taskListViewModel.deleteTask(task.taskID ?: "", userId) },
+                                onEdit = { task.taskID?.let { navController.navigate("AddEditTaskScreen/$it") } },
+                                navController = navController
+                            )
+                        }
                     }
                 }
             }
@@ -109,60 +133,156 @@ fun HomeScreen(
     }
 }
 
-// 🔹 Menu Latéral (Drawer)
+// 🔹 Top Bar avec bouton pour ouvrir le menu latéral
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeTopBar(onMenuClick: () -> Unit) {
+    CenterAlignedTopAppBar(
+        title = {
+            Text(
+                text = "HOME",
+                color = Color.Black,
+                fontSize = 20.sp
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onMenuClick) {
+                Icon(Icons.Filled.Menu, contentDescription = "Menu")
+            }
+        },
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+            containerColor = Color.White,
+            titleContentColor = Color.Black
+        )
+    )
+}
+
+// 🔹 Menu latéral (Drawer)
 @Composable
 fun DrawerMenu(
     authViewModel: AuthViewModel,
     navController: NavController,
-    scaffoldState: ScaffoldState
+    drawerState: DrawerState
 ) {
+    val coroutineScope = rememberCoroutineScope()
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF121212)) // Fond sombre pour une meilleure intégration
     ) {
-        Column {
-            Text(text = "Menu", fontSize = 22.sp, color = Color.Black)
+        // 🔹 En-tête du menu avec Avatar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF6200EA)) // Violet Material
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(Color.White, shape = CircleShape)
+                        .border(2.dp, Color.White, CircleShape)
+                        .shadow(4.dp, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = "User",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                val username by authViewModel.username.collectAsState()
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Hello, $username!",
+                    fontSize = 20.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
 
-            // 🔹 Bouton Home
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        navController.navigate("HomeScreen")
-                    }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Home, contentDescription = "Home")
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(text = "Home", fontSize = 18.sp)
             }
+        }
 
-            Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            // 🔹 Bouton Déconnexion
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        authViewModel.signOut()
-                        navController.navigate("SignInScreen") {
-                            popUpTo("SignInScreen") { inclusive = true }
-                        }
+        // 🔹 Liste des options avec highlight
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            DrawerItem(
+                icon = Icons.Filled.Home,
+                text = "Home",
+                isSelected = true, // Met en surbrillance l'option active
+                onClick = {
+                    navController.navigate("HomeScreen")
+                    coroutineScope.launch { drawerState.close() }
+                }
+            )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.Gray)
+
+            DrawerItem(
+                icon = Icons.Filled.ExitToApp,
+                text = "Logout",
+                color = Color.Red,
+                isSelected = false,
+                onClick = {
+                    authViewModel.signOut()
+                    navController.navigate("SignInScreen") {
+                        popUpTo("SignInScreen") { inclusive = true }
                     }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.ExitToApp, contentDescription = "Logout", tint = Color.Red)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(text = "Logout", fontSize = 18.sp, color = Color.Red)
-            }
+                    coroutineScope.launch { drawerState.close() }
+                }
+            )
         }
     }
 }
 
+// 🔹 Élément du menu avec effet de sélection
+@Composable
+fun DrawerItem(
+    icon: ImageVector,
+    text: String,
+    color: Color = Color.White,
+    isSelected: Boolean = false,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (isSelected) Color(0xFF6200EA) else Color.Transparent
+    val textColor = if (isSelected) Color.White else color
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(12.dp)
+            .background(backgroundColor, shape = RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = textColor,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = text,
+            fontSize = 18.sp,
+            color = textColor,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
+
+
+
+// 🔹 Swipeable Task Item (corrigé)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun SwipeTaskItem(
@@ -209,63 +329,5 @@ fun SwipeTaskItem(
         dismissContent = {
             TaskItem(task, onTaskChecked = {}, onClick = {})
         }
-    )
-}
-
-@Composable
-fun TaskItem(task: Task, onTaskChecked: (Boolean) -> Unit, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = task.taskIsFinished ?: false,
-                onCheckedChange = { isChecked -> onTaskChecked(isChecked) },
-                modifier = Modifier.padding(end = 12.dp)
-            )
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = task.taskName ?: "No title",
-                    fontSize = 18.sp,
-                    color = Color.Black
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Due on ${task.taskDueDate ?: "No due date"}",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HomeTopBar() {
-    CenterAlignedTopAppBar(
-        title = {
-            Text(
-                text = "HOME",
-                color = Color.Black,
-                fontSize = 20.sp
-            )
-        },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-            containerColor = Color.White,
-            titleContentColor = Color.Black
-        )
     )
 }
